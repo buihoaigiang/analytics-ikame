@@ -1,0 +1,10 @@
+﻿gcloud_credentials.json
+*.json
+!package.json
+data/outputs/
+outputs/
+**/*.html
+__pycache__/
+*.pyc
+.DS_Store
+Thumbs.db
