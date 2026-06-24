@@ -18,6 +18,16 @@
 - [open] Country-controlled analysis (US-only by channel) để tách behavioral signal khỏi country mix effect
 - [open] Kiểm tra Adjust dashboard đang dùng denominator nào cho cancellation rate — confirm `discounted_offer` có được tính không
 
+## 2026-06-24 — Wrap (scan-vs-purchase-analysis)
+- [decision] Dùng `first_open` làm proxy cho install trong GA4 — không có event `app_install` riêng
+- [decision] `ft_face_scan` feature mới lên production từ 23/06/2026 — chỉ 1 user/ngày trong 2 ngày đầu, chưa đủ volume để kết luận
+- [caveat] `status = 'success'` tồn tại trong event_params của `ft_face_scan` (22 events) — nhưng cần thêm vài ngày để có tỷ lệ ý nghĩa
+- [pattern] Trong GA4 BigQuery, UNNEST event_params phải làm trong `base` CTE thành boolean flag — không thể dùng column alias trong CASE WHEN của CTE khác
+- [pattern] Query pattern chuẩn: `(SELECT value.string_value FROM UNNEST(event_params) WHERE key = 'status') = 'success' AS is_facescan_success` trong base, rồi `CASE WHEN is_facescan_success THEN user_pseudo_id END` trong aggregation CTE
+- [pattern] Breakdown country dùng `geo.country` thêm vào SELECT + GROUP BY — không cần join thêm bảng
+- [pattern] Timestamp GA4: `TIMESTAMP_MICROS(event_timestamp)` + `INTERVAL 7 HOUR` → UTC+7 → `DATE()`
+- [open] Theo dõi tỷ lệ facescan/install khi đủ volume (kỳ vọng ~1 tuần sau launch)
+
 ## 2026-06-23 — Wrap (test-app/test-project-01)
 - [decision] Tạo project scaffold `test-app/test-project-01` với CLAUDE.md cơ bản — chưa có analysis scope cụ thể
 - [open] CLAUDE.md của test-project-01 còn trống phần Mô tả — cần điền khi đã rõ mục tiêu phân tích
