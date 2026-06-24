@@ -18,6 +18,17 @@
 - [open] Country-controlled analysis (US-only by channel) để tách behavioral signal khỏi country mix effect
 - [open] Kiểm tra Adjust dashboard đang dùng denominator nào cho cancellation rate — confirm `discounted_offer` có được tính không
 
+## 2026-06-24 — Wrap (revenue-discrepancy-ga4-vs-adjust / ios-face-scanner)
+- [decision] Không có discrepancy thực sự giữa GA4 và Adjust — nguyên nhân là timing + sandbox, không phải bug tracking
+- [decision] `in_app_purchase` trên Firebase = trial start ($0) — đúng trên cả 2 platform, tương đương `trial_started` trên Adjust, revenue = $0 là chính xác
+- [caveat] Revenue $142.20 trên GA4 (tuần Jun 17-23) đến từ 2 event S2S Apple↔Firebase: `app_store_subscription_renew` ($127.08) và `app_store_subscription_convert` ($7.56 sandbox) — xảy ra trước khi Adjust init thành công → Adjust không nhận được
+- [caveat] Event $7.56 ngày 23/06 từ `app_store_subscription_convert` là sandbox — không tính vào revenue thực
+- [caveat] BigQuery export mới connect từ Jun 11/2026 → chỉ có 14 intraday tables, chưa có finalized tables (events_YYYYMMDD) → `app_store_subscription_renew` không xuất hiện trong BQ raw vì event này chỉ được ghi vào finalized tables sau 24-72h xử lý
+- [pattern] Intraday tables (`events_intraday_*`) chỉ chứa real-time device events. Server-side subscription events (renew/convert từ Apple S2S) chỉ xuất hiện trong finalized tables — cần đợi BQ export finalize mới query được
+- [pattern] Khi query BQ với wildcard `events_*` mà chỉ có intraday tables, `_TABLE_SUFFIX` là `intraday_YYYYMMDD` không phải `YYYYMMDD` — filter `BETWEEN '20260617' AND '20260623'` sẽ không match → kết quả rỗng
+- [open] Theo dõi khi finalized tables xuất hiện (vài ngày tới) để verify revenue S2S có đúng value không
+- [open] Setup Apple S2S subscription notifications → forward sang Adjust nếu muốn Adjust track renewal revenue
+
 ## 2026-06-24 — Wrap (scan-vs-purchase-analysis)
 - [decision] Dùng `first_open` làm proxy cho install trong GA4 — không có event `app_install` riêng
 - [decision] `ft_face_scan` feature mới lên production từ 23/06/2026 — chỉ 1 user/ngày trong 2 ngày đầu, chưa đủ volume để kết luận
