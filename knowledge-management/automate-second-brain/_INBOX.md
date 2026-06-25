@@ -1,5 +1,41 @@
 # Inbox — automate-second-brain
 
+## 2026-06-25 — Wrap (exp63 iOS Heart Rate — intro_exp63)
+- [decision] **Tắt vĩnh viễn FlowIntro14_IAP_New, giữ Baseline**: V1 chèn paywall ở step 8 (trước personalization) → +6.5pp paywall reach nhưng mất -13.8% purchases. CVR thấp hơn 2.1pp (7.2% vs 9.3%). Personalization flow quyết định willingness-to-pay, không phải thời điểm hiển thị paywall.
+- [caveat] **Country confounding trong Rollback**: Rollback unfiltered = 59.1% US + 41% Brazil/Spain/India. A/B test (Baseline/V1) = 100% US. Nếu không filter cùng country → apparent CVR drop 4.3pp là artifact, không phải user quality thật. Sau US-only filter: Rollback ≈ Baseline ở mọi metric.
+- [caveat] **Tên metric sai trong report ban đầu**: "Paywall CVR" = subscribe5_2/subscribe5_new (tỷ lệ reach screen thứ 2, không phải purchase CVR). "Subscribe rate" = subscribe5_2/splash (reach rate, không phải subscription rate). Purchase CVR thực = finish_purchase/view từ SDK_PREMIUM_TRACK.
+- [caveat] **SDK_PREMIUM_TRACK data lag**: max_date = 2026-06-21 → Rollback users (install ≥22/06) chưa có purchase data. Không thể kết luận purchase CVR cho Rollback cho đến khi data cập nhật.
+- [caveat] **Revenue per user không significant**: Firebase UI: $0.64 vs $0.52 (−19%), p-value = 0.994. 7 ngày với n≈8,700 chưa đủ power để kết luận thống kê cho IAP A/B test.
+- [pattern] **Luôn filter cùng country khi so sánh cohorts**: Nếu nhóm A chỉ assign 1 country (A/B test US-only) nhưng nhóm B là organic global, phải filter cùng country TRƯỚC khi so sánh. Không filter → country composition khác → CVR gap giả tạo.
+- [pattern] **Paywall sớm ≠ CVR tốt**: Increasing paywall reach bằng cách đặt paywall trước value delivery thường backfire. User chưa thấy giá trị → thấp willingness-to-pay → CVR giảm bù lại volume tăng. Net = revenue giảm.
+- [open] Sign_in Rollback thấp hơn Baseline 1.1pp (95.4% vs 96.5%) — PM confirm không có thay đổi UI. Cần investigate khi có thêm data.
+- [open] Rollback purchase CVR: cần chờ SDK_PREMIUM_TRACK sau 22/06 để xác nhận.
+
+---
+⚠️ Note: Entry "2026-06-25 — exp63 iOS Heart Rate (update: Rollback analysis)" bên dưới chứa kết luận SAI (dựa trên Rollback unfiltered + filter intro7). Đã sửa trong session này — xem Obsidian note.
+---
+
+## 2026-06-25 — exp63 iOS Heart Rate (update: Rollback analysis)
+- [caveat] "Rollback" (≥22/06/2026, n=17,439) KHÔNG phải rollback về Baseline. PM đã deploy flow mới: subscribe5_new xuất hiện ở step 2 (sau sign_in_onboarding, 70.9%) — còn sớm hơn cả V1 (step 7). Paywall CVR Rollback = 13.8% (9.8/70.9) — TỆ NHẤT trong 3 nhóm.
+- [decision] Paywall CVR 3 nhóm: Baseline 25.0% (16.2/64.7) > V1 24.4% (17.3/70.8) > Rollback 13.8% (9.8/70.9) → mỗi lần chèn paywall sớm hơn, CVR càng giảm. Học được: user cần trải nghiệm giá trị TRƯỚC khi thấy paywall.
+- [pattern] Funnel Rollback (≥22/06): splash(100) → sign_in(94) → subscribe5_new(70.9) → intro7_heart_measure(60.3) → ... → new_home_v2(32.1) → subscribe5_2(9.8). subscribe5_2 thấp hơn nhiều Baseline (16.2%) và V1 (17.3%).
+- [open] Cần xác nhận với PM: deploy ≥22/06 là gì? Có phải intentional test với paywall ở step 2 không? Hay bug?
+- [pattern] Khi vẽ butterfly chart với 3+ flow khác nhau: mỗi variant cần tách riêng hàng subscribe5_new tại đúng vị trí; dùng ⚡ prefix + amber (#C4720A) để highlight diverge point.
+
+## 2026-06-25 — exp63 iOS Heart Rate
+- [caveat] PM thay đổi A/B test (firebase_exp_63) một cách tùy tiện, không đúng tinh thần A/B test: variant FlowIntro14_IAP_New chèn subscribe5_new sớm (sau intro7_check_apple_watch, step 7) thay vì sau intro7_final_processing (step 14) như Baseline → làm vỡ toàn bộ personalization flow, pay rate giảm mạnh
+- [pattern] subscribe5_new xuất hiện ở 2 vị trí khác nhau giữa Baseline (step 14, sau final_processing, 64.7%) vs V1 (step 7, sau check_apple_watch, 70.8%) → khi vẽ funnel butterfly chart cần tách thành 2 hàng riêng, không dùng chung 1 hàng
+- [decision] Paywall CVR: Baseline 40.7% vs FlowIntro14 19.9% (−20.7pp) — nguyên nhân: user chưa qua personalization nên chưa thấy đủ giá trị khi bị chặn paywall sớm
+- [open] Cần confirm với PM: exp63 có phải test đúng hypothesis không, hay chỉ là thay đổi ad-hoc mà không có hypothesis rõ ràng trước?
+- [pattern] Cách tạo funnel butterfly chart A/B (exp63):
+  1. AB table: `iOS_Heart_Rate_CACHED_Events_03.firebase_ab_testing_corhort_all_metrics` WHERE experiment='firebase_exp_63' → variant 0=Baseline, 1=FlowIntro14
+  2. Screen table: `iOS_Heart_Rate_CACHED_Events_08.SCREEN_ACTIVE_AUDIENCE` WHERE session_number=1 AND install_date>='2026-06-18', group by (uid, screen_from)
+  3. Join: AB table dùng UPPERCASE user_pseudo_id → phải LOWER() trước khi join với screen table (lowercase)
+  4. Tính % = COUNT(DISTINCT uid) / total_ab per variant
+  5. subscribe5_new xuất hiện ở 2 vị trí khác nhau → tách thành 2 hàng riêng: [V1 step 7, sau check_apple_watch] và [Baseline step 14, sau final_processing]
+  6. Plotly butterfly: Baseline bars x âm (đi trái), V1 bars x dương (đi phải); `include_plotlyjs=True` để tự-chứa (không dùng CDN)
+  7. Script: `20260625_ios_heart_rate_exp63/intro_exp63/data/outputs/funnel_ab_exp63.html`
+
 ## 2026-06-25
 - [decision] Revenue thực từ web2wave: Stripe chỉ tính `invoice.payment_succeeded` → `first_purchase`; PayPal chỉ tính `PAYMENT.SALE.COMPLETED` → `first_purchase`. Web2wave normalize cả 2 về cùng `transactionType = 'first_purchase'` → filter `WHERE transactionType = 'first_purchase'` đúng cho cả 2 gateway, không cần tách
 
