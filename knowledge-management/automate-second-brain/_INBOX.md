@@ -39,6 +39,18 @@
 - [pattern] Timestamp GA4: `TIMESTAMP_MICROS(event_timestamp)` + `INTERVAL 7 HOUR` → UTC+7 → `DATE()`
 - [open] Theo dõi tỷ lệ facescan/install khi đủ volume (kỳ vọng ~1 tuần sau launch)
 
+## 2026-06-24 — Wrap (transaction-providers)
+- [decision] Revenue thực chỉ tính từ `first_purchase` — `cancel` có `amount_real > 0` nhưng là giá trị subscription bị cancel, không phải cash nhận được
+- [decision] Bảng chỉ có 3 transactionType: `first_purchase`, `cancel`, `past_due` — không có `renewal`/`rebill` → không thể tính retention thực sự với data hiện tại
+- [caveat] Data mới có 2 ngày (22-23/6/2026), provider duy nhất là `web2wave`, domain duy nhất `dsblack.semantra.cloud`, gateway: Stripe + PayPal
+- [caveat] Duplicate events: cùng userId + price_id + giây → 2 row với id khác nhau. Cần dedup bằng `(userId, price_id, TIMESTAMP_TRUNC(createdAt, MINUTE))` trước khi đếm giao dịch
+- [caveat] 1 userId có thể mua nhiều plan khác nhau (YEARLY + Onetime GLP) — join userId trực tiếp sẽ overcount nếu không group by plan
+- [pattern] Proxy retention với `nextBillingDate`: subscription plans (1-WEEK, 4-WEEK, YEARLY) = 100% có nextBillingDate; Onetime plans = 0% → phân biệt được subscription vs one-time payment
+- [pattern] Cancel với nextBillingDate trong tương lai = canceled but not yet expired (user đã tắt auto-renew nhưng còn trong period)
+- [open] Renewal events chưa log hoặc bảng chưa track — cần xác nhận với backend web2wave/Stripe webhook có gửi renewal event không
+- [open] Retention thực sự cần đợi ít nhất 1 tuần (1-WEEK plan renew 29-30/6) để có renewal event đầu tiên
+- [open] Cần làm rõ `cancel` amount: là refund hay chỉ là status log? Nếu là status log thì revenue report cần filter strict `first_purchase` only
+
 ## 2026-06-23 — Wrap (test-app/test-project-01)
 - [decision] Tạo project scaffold `test-app/test-project-01` với CLAUDE.md cơ bản — chưa có analysis scope cụ thể
 - [open] CLAUDE.md của test-project-01 còn trống phần Mô tả — cần điền khi đã rõ mục tiêu phân tích
