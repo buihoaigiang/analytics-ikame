@@ -1,45 +1,68 @@
-# CLAUDE.md -- intro_exp63
+# CLAUDE.md
 
-## Description
-Phân tích A/B test firebase_exp_63 (exp63) trên iOS Heart Rate app.
-Mục tiêu: Tìm nguyên nhân pay rate toàn app giảm mạnh, đặc biệt variant FlowIntro14_IAP_New thấp hơn Baseline.
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Experiment Overview
-- **Firebase experiment**: `firebase_exp_63` (tên trên Firebase: `AB_IAP_Intro14`)
-- **Start date**: 18/06/2026
-- **Variants**:
-  - `Baseline`: flow intro gốc
-  - `FlowIntro14_IAP_New`: thay đổi màn signin + vị trí màn subscribe
-- **Split**: Baseline 4,300 users — FlowIntro14_IAP_New 4,366 users (tổng ~8,700)
-- **Firebase result (7 days)**: Purchase revenue per user: Baseline $0.64 vs FlowIntro14_IAP_New $0.52 (-19%), p-value 0.994 → không có ý nghĩa thống kê theo Firebase
+## Project
 
-## Problem Statement
-- Pay rate toàn app **giảm mạnh** sau khi exp63 bắt đầu (18/06/2026)
-- Pay rate của **FlowIntro14_IAP_New thấp hơn Baseline** khá nhiều
-- Cần tìm hiểu nguyên nhân:
-  1. Funnel conversion thay đổi ở bước nào? (signin → subscribe → purchase)
-  2. Variant mới có làm drop-off sớm hơn không?
-  3. Có confounding factor nào không? (update app version, external traffic shift, v.v.)
+Phân tích A/B test `firebase_exp_63` (AB_IAP_Intro14) trên **iOS Heart Rate** app.  
+**Kết luận**: Baseline thắng. FlowIntro14_IAP_New đã bị tắt. Analysis hoàn chỉnh tại `data/outputs/analysis_exp63.md`.
 
-## Scope
-- App: iOS Heart Rate (ios-heart-rate)
-- Country: (chưa xác định — kiểm tra)
-- Date range: từ 18/06/2026 trở đi (so sánh pre/post nếu cần)
-- Filter: chỉ users thuộc firebase_exp_63
+## Experiment
 
-## Data Source
-- BQ Project: team-begamob
-- Main table: (chưa xác định — cần explore)
-- Credential: gcloud_credentials.json (DO NOT commit)
+| | Baseline (variant=`'0'`) | FlowIntro14_IAP_New (variant=`'1'`) | Rollback |
+|--|--|--|--|
+| Paywall position | Step 14 (sau personalization) | Step 8 (sau intro7_analyzing) | Step 14 |
+| Date | 18–21/06/2026 | 18–21/06/2026 | install ≥ 22/06/2026 |
+| n (US only) | 4,167 | 4,207 | 10,302 |
 
-## Analysis Plan
-1. Xác định bảng BQ chứa event của iOS Heart Rate
-2. Lọc users thuộc exp63 theo `firebase_exp_name` hoặc `user_pseudo_id`
-3. Tính funnel: install → signin → paywall_show → purchase theo từng variant
-4. Tính pay rate (purchasers / total users) theo ngày và theo variant
-5. So sánh pre/post 18/06 để xem pay rate drop có phải do exp không
-6. Kiểm tra các metric phụ: session length, screen_view sequence, error events
+## BigQuery Tables
+
+```
+team-begamob.iOS_Heart_Rate_CACHED_Events_03.firebase_ab_testing_corhort_all_metrics
+  → experiment variant assignment (experiment='firebase_exp_63', variant='0'/'1')
+  → user_pseudo_id là UPPERCASE → phải LOWER() khi join
+
+team-begamob.iOS_Heart_Rate_CACHED_Events_08.SCREEN_ACTIVE_AUDIENCE
+  → screen funnel (screen_from, session_number, country, install_date)
+  → denominator = splash users, session_number=1, country='United States'
+
+team-begamob.iOS_Heart_Rate_CACHED_Events_02.SDK_PREMIUM_TRACK
+  → paywall events: open / select_product / finish_purchase
+  → max_date = 2026-06-21 (Rollback users chưa có data)
+  → params_screen_from cần carry-forward qua LAST_VALUE IGNORE NULLS
+```
+
+## Credential
+
+```python
+CRED_PATH = r'c:\Users\admin\Desktop\analytics-ikame\ios-heart-rate\funnel\intro7-vs-intro6\gcloud_credentials.json'
+# type: authorized_user → phải truyền project='team-begamob'
+creds = Credentials(token=None, refresh_token=info['refresh_token'],
+    client_id=info['client_id'], client_secret=info['client_secret'],
+    token_uri='https://oauth2.googleapis.com/token')
+client = bigquery.Client(credentials=creds, project='team-begamob')
+```
+
+## Workflow
+
+```
+queries/query_funnel_us_only.py   → data/outputs/funnel_data.json
+queries/plot_butterfly_charts.py  → data/outputs/funnel_ab_exp63.html
+                                     data/outputs/funnel_baseline_vs_rollback.html
+                                     data/outputs/funnel_v1_vs_rollback.html
+queries/query_paywall_sdk.py      → stdout (SDK_PREMIUM_TRACK purchase CVR)
+```
+
+Chạy tuần tự: query_funnel_us_only.py trước (tạo funnel_data.json), sau đó plot_butterfly_charts.py đọc file đó.
+
+## Key Caveats
+
+- **Country filter bắt buộc**: A/B test chỉ assign US users; Rollback là organic global (59% US). Luôn `WHERE country = 'United States'` cho cả 3 nhóm khi so sánh.
+- **subscribe5_new xuất hiện 2 lần** trong funnel chart: V1 ở step 8 và Baseline ở step 14 → tách thành 2 hàng riêng khi vẽ butterfly chart.
+- **SDK_PREMIUM_TRACK**: "Paywall CVR" trong bảng này = `finish_purchase / open` (purchase CVR thực). Không nhầm với `subscribe5_2 / subscribe5_new` (chỉ là screen reach ratio, không phải CVR).
+- **Revenue per user Firebase**: p-value = 0.994 → chưa đạt ý nghĩa thống kê.
 
 ## Session Management
-- /note <insight>
-- /wrap
+
+- `/note <insight>` — ghi nhanh vào `_INBOX.md`
+- `/wrap` — tổng hợp session, commit, push
