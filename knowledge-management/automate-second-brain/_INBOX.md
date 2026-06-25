@@ -1,5 +1,16 @@
 # Inbox — automate-second-brain
 
+## 2026-06-25
+- [decision] Revenue thực từ web2wave: Stripe chỉ tính `invoice.payment_succeeded` → `first_purchase`; PayPal chỉ tính `PAYMENT.SALE.COMPLETED` → `first_purchase`. Web2wave normalize cả 2 về cùng `transactionType = 'first_purchase'` → filter `WHERE transactionType = 'first_purchase'` đúng cho cả 2 gateway, không cần tách
+
+## 2026-06-25 — Wrap (transaction-providers + ios-face-scanner dashboard)
+- [decision] Cột `raw` chứa đầy đủ attribution: `utm_campaign`, `user_platform`, `user_country_code`, `status` — extract bằng `JSON_VALUE(raw, '$.user_visit.utm_campaign')` etc. Bảng BQ không expose sẵn các field này
+- [decision] Duplicate root cause: `double_purchase_behaviour: 1` trong price config của web2wave + Stripe webhook gửi 2 lần → mỗi transaction log 2 row cùng giây
+- [pattern] Revenue column chuẩn: `CASE WHEN transactionType = 'first_purchase' THEN amount_real ELSE 0 END AS revenue`
+- [bug] Looker Studio "query returned an error": dùng SELECT alias trong WHERE → fix bằng cách dùng column gốc (`createdAt` thay vì `event_date`). Cũng không thể `DATE(DATE_col, timezone)` — DATE đã convert rồi không wrap thêm timezone được
+- [pattern] Looker Studio + `events_*` wildcard: luôn thêm `_TABLE_SUFFIX BETWEEN FORMAT_DATE('%Y%m%d', ...) AND FORMAT_DATE('%Y%m%d', ...)` trong WHERE để partition pruning — tránh scan full table mỗi lần load dashboard
+- [pattern] `event_date` UTC+7 từ GA4: `DATE(TIMESTAMP_ADD(TIMESTAMP_MICROS(event_timestamp), INTERVAL 7 HOUR))` — hoặc ngắn hơn `DATE(createdAt, "UTC+7")` với TIMESTAMP column
+
 ## 2026-06-23 — Wrap
 - [decision] README.md đặt trong `knowledge-management/automate-second-brain/` — folder này là meta-documentation về chính hệ thống, không phải code phân tích
 - [pattern] Cấu trúc README 8-bước đủ để onboard từ đầu: git init → global CLAUDE.md → 3 hooks → settings.json → 2 slash commands → xong
